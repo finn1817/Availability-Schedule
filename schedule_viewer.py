@@ -8,7 +8,7 @@ class ScheduleViewer:
         self.root.title("Schedule Viewer")
         self.root.geometry("700x600")  # window height for a decent layout
 
-    ----------------------------------------------------------------------------------------------------------------
+   # ----------------------------------------------------------------------------------------------------------------
         
         # UI stuff
         self.load_button = tk.Button(root, text="Load Schedule", command=self.load_schedule)
@@ -30,7 +30,7 @@ class ScheduleViewer:
         self.available_text = tk.Text(root, height=10, width=80)
         self.available_text.pack(pady=5)
 
-    ----------------------------------------------------------------------------------------------------------------
+   # ----------------------------------------------------------------------------------------------------------------
 
     def load_schedule(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
@@ -83,7 +83,7 @@ class ScheduleViewer:
             # show any errors that happen during file reading
             messagebox.showerror("Error", f"Failed to read Excel file or process data: {e}")
 
-    ----------------------------------------------------------------------------------------------------------------
+   # ----------------------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     root = tk.Tk()
