@@ -51,7 +51,7 @@ class ScheduleViewer:
             selected_day = selected_day.strip()
             available_workers = self.df[
                 (self.df['Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False)) &
-                (self.df['Shift Hours'] <= 4) &  # only allows max of 4 hours scheduled
+                (self.df['Shift Hours'] <= 4) &  # only allow max of 4 hours scheduled
                 (self.df['Time available on Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False))
             ]
             not_available_workers = self.df[~self.df['Email'].isin(available_workers['Email'])]
