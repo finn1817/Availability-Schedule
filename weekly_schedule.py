@@ -31,7 +31,7 @@ class WeeklyScheduleGenerator:
         try:
             self.schedule_df = pd.read_excel(file_path)
 
-            required_columns = {'First Name', 'Last Name', 'Days Available', 'Shift Hours', 'Time available on Days Available'}
+            required_columns = {'First Name', 'Last Name', 'Days Available', 'Time Available on Days Available', 'Time not Available'}
             if not required_columns.issubset(self.schedule_df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
                 return
@@ -54,25 +54,21 @@ class WeeklyScheduleGenerator:
             "Wednesday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
             "Thursday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
             "Friday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"]
-            # add in any other times / shifts here
         }
 
         weekly_schedule = {day: [] for day in time_slots.keys()}
 
         for _, row in self.schedule_df.iterrows():
-            if row['Shift Hours'] > self.MAX_HOURS:
-                continue  # skip anyone violating max hours
-            
             for day, slots in time_slots.items():
-                if day in row['Days Available']:
-                    available_times = row['Time available on Days Available'].split(",")  # split available times
+                if day in row['Days Available'] and day not in row['Time not Available']:
+                    available_times = row['Time Available on Days Available'].split(",")
                     for slot in slots:
                         if slot.strip() in available_times and len(weekly_schedule[day]) < self.MAX_SHIFTS_PER_DAY:
                             weekly_schedule[day].append(f"{row['First Name']} {row['Last Name']} - {slot.strip()}")
                             break
 
         self.schedule_data = weekly_schedule
-        print(self.schedule_data)  # for debugging
+        print(self.schedule_data)
 
     def save_word_file(self):
         if not self.schedule_data:
