@@ -5,8 +5,8 @@ from docx import Document
 
 class WeeklyScheduleGenerator:
     MAX_HOURS = 4  # max hours allowed per shift
-    MAX_SHIFTS_PER_DAY = 1  # limit to one shift per person per day
-
+    MAX_SHIFTS_PER_DAY = 2  # limit to two shifts per person per day (can adjust this)
+    
     def __init__(self, root):
         self.root = root
         self.root.title("Weekly Schedule Generator")
@@ -46,6 +46,7 @@ class WeeklyScheduleGenerator:
             messagebox.showerror("Error", "Please load a schedule file first.")
             return
         
+        # time slots per day
         time_slots = {
             "Saturday": ["12 PM - 4 PM", "4 PM - 8 PM", "8 PM - 12 AM"],
             "Sunday": ["12 PM - 4 PM", "4 PM - 8 PM", "8 PM - 12 AM"],
@@ -56,20 +57,30 @@ class WeeklyScheduleGenerator:
             "Friday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"]
         }
 
-        weekly_schedule = {day: [] for day in time_slots.keys()}
+        weekly_schedule = {day: [] for day in time_slots.keys()}  # start empty daily schedules
 
         for _, row in self.schedule_df.iterrows():
+            # skip workers who violate shift hour constraints
+            if "Shift Hours" in row and row['Shift Hours'] > self.MAX_HOURS:
+                continue
+            
             for day, slots in time_slots.items():
-                if day in row['Days Available'] and day not in row['Time not Available']:
-                    available_times = row['Time Available on Days Available'].split(",")
+                # check if the worker is available on this day
+                if day in row['Days Available']:
+                    if "Time not Available" in row and day in str(row['Time not Available']):
+                        continue  # skip if the worker marked 'Not Available' for this day
+
+                    available_times = str(row['Time Available on Days Available']).split(",")
                     for slot in slots:
+                        # if the worker is available for this slot and we haven't filled the day's quota
                         if slot.strip() in available_times and len(weekly_schedule[day]) < self.MAX_SHIFTS_PER_DAY:
                             weekly_schedule[day].append(f"{row['First Name']} {row['Last Name']} - {slot.strip()}")
-                            break
+                            break  # assign this worker to the slot, and move to the next worker
 
-        self.schedule_data = weekly_schedule
-        print(self.schedule_data)
-
+        self.schedule_data = weekly_schedule  # save schedule data
+        print(self.schedule_data)  # for debugging
+        messagebox.showinfo("Success", "Schedule generated successfully!")
+    
     def save_word_file(self):
         if not self.schedule_data:
             messagebox.showerror("Error", "Please generate the schedule first.")
@@ -81,7 +92,7 @@ class WeeklyScheduleGenerator:
 
             for day, workers in self.schedule_data.items():
                 doc.add_heading(day, level=2)
-                doc.add_paragraph(", ".join(workers) if workers else "No workers available")
+                doc.add_paragraph("\n".join(workers) if workers else "No workers available")
             
             file_path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word files", "*.docx")])
             if file_path:
