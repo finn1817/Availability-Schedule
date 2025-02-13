@@ -6,8 +6,11 @@ class ScheduleViewer:
     def __init__(self, root):
         self.root = root
         self.root.title("Schedule Viewer")
-        self.root.geometry("700x600")  # made window bigger for more info
+        self.root.geometry("700x600")  # window height for a decent layout
+
+    ----------------------------------------------------------------------------------------------------------------
         
+        # UI stuff
         self.load_button = tk.Button(root, text="Load Schedule", command=self.load_schedule)
         self.load_button.pack(pady=10)
         
@@ -27,27 +30,38 @@ class ScheduleViewer:
         self.available_text = tk.Text(root, height=10, width=80)
         self.available_text.pack(pady=5)
 
+    ----------------------------------------------------------------------------------------------------------------
+
     def load_schedule(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
         if not file_path:
             return
         
         try:
+            # read off the Excel file that you choose
             self.df = pd.read_excel(file_path)
             selected_day = self.day_dropdown.get()
+            
             if not selected_day:
-                messagebox.showerror("Error", "Please select a day")
+                messagebox.showerror("Error", "Please select a day.")
                 return
             
-            # separate not available and available workers
-            not_available_workers = self.df[self.df['Days Available'].str.contains(selected_day, na=False)]
-            available_workers = self.df[~self.df['Days Available'].str.contains(selected_day, na=False, case=False)]
+            # error checking: make sure the excel columns exist
+            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available', 'Time not Available'}
+            if not required_columns.issubset(self.df.columns):
+                messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
+                return
             
-            # clear both text areas
+            # clears both text areas
             self.not_available_text.delete("1.0", tk.END)
             self.available_text.delete("1.0", tk.END)
             
-            # show workers not available
+            # filter for available and not available workers
+            selected_day = selected_day.strip()  # makes sure theirs no leading/trailing spaces
+            available_workers = self.df[self.df['Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False)]
+            not_available_workers = self.df[~self.df['Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False)]
+            
+            # show all workers not available
             if not not_available_workers.empty:
                 self.not_available_text.insert(tk.END, "The following workers are NOT AVAILABLE on " + selected_day + ":\n")
                 self.not_available_text.insert(tk.END, "-" * 50 + "\n")
@@ -56,7 +70,7 @@ class ScheduleViewer:
             else:
                 self.not_available_text.insert(tk.END, "No workers marked as 'Not Available' for this day.\n")
             
-            # now show available workers
+            # show all the available workers
             if not available_workers.empty:
                 self.available_text.insert(tk.END, "The following workers are AVAILABLE on " + selected_day + ":\n")
                 self.available_text.insert(tk.END, "-" * 50 + "\n")
@@ -66,7 +80,10 @@ class ScheduleViewer:
                 self.available_text.insert(tk.END, "No workers marked as 'Available' for this day.\n")
         
         except Exception as e:
+            # show any errors that happen during file reading
             messagebox.showerror("Error", f"Failed to read Excel file or process data: {e}")
+
+    ----------------------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     root = tk.Tk()
