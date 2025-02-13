@@ -40,7 +40,7 @@ class ScheduleViewer:
                 messagebox.showerror("Error", "Please select a day.")
                 return
             
-            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available', 'Shift Hours', 'Time available on Days Available'}
+            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available', 'Time Available on Days Available', 'Time not Available'}
             if not required_columns.issubset(self.df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
                 return
@@ -51,8 +51,7 @@ class ScheduleViewer:
             selected_day = selected_day.strip()
             available_workers = self.df[
                 (self.df['Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False)) &
-                (self.df['Shift Hours'] <= 4) &  # only allow max of 4 hours scheduled
-                (self.df['Time available on Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False))
+                (~self.df['Time not Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False))  # Exclude workers not available
             ]
             not_available_workers = self.df[~self.df['Email'].isin(available_workers['Email'])]
             
@@ -72,7 +71,7 @@ class ScheduleViewer:
                 for _, row in available_workers.iterrows():
                     self.available_text.insert(
                         tk.END, 
-                        f"{row['First Name']} {row['Last Name']} - Email: {row['Email']} - Hours: {row['Shift Hours']} Hours - Time Available: {row['Time available on Days Available']}\n"
+                        f"{row['First Name']} {row['Last Name']} - Email: {row['Email']} - Time Available: {row['Time Available on Days Available']}\n"
                     )
             else:
                 self.available_text.insert(tk.END, f"No workers marked as 'Available' for {selected_day}.\n")
