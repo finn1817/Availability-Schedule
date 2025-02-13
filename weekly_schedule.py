@@ -1,12 +1,10 @@
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
+from PIL import Image, ImageDraw, ImageFont
 from docx import Document
 
 class WeeklyScheduleGenerator:
-    MAX_HOURS = 4  # max hours allowed per shift
-    MAX_SHIFTS_PER_DAY = 2  # limit to two shifts per person per day (can adjust this)
-    
     def __init__(self, root):
         self.root = root
         self.root.title("Weekly Schedule Generator")
@@ -21,7 +19,8 @@ class WeeklyScheduleGenerator:
         self.save_button = tk.Button(root, text="Save Word File", command=self.save_word_file)
         self.save_button.pack(pady=10)
         
-        self.schedule_data = None
+        self.schedule_data = None  # will hold the processed schedule data
+        self.image_path = "weekly_schedule.png"  # path to save the generated image
 
     def load_schedule(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
@@ -29,9 +28,11 @@ class WeeklyScheduleGenerator:
             return
         
         try:
+            # load the data into a pandas dataframe
             self.schedule_df = pd.read_excel(file_path)
 
-            required_columns = {'First Name', 'Last Name', 'Days Available', 'Time Available on Days Available', 'Time not Available'}
+            # make sure excel columns are their
+            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available'}
             if not required_columns.issubset(self.schedule_df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
                 return
@@ -45,55 +46,83 @@ class WeeklyScheduleGenerator:
         if self.schedule_df is None:
             messagebox.showerror("Error", "Please load a schedule file first.")
             return
-        
-        # time slots per day
+
+        # defining days with their working hours (lounge hours)
         time_slots = {
-            "Saturday": ["12 PM - 4 PM", "4 PM - 8 PM", "8 PM - 12 AM"],
-            "Sunday": ["12 PM - 4 PM", "4 PM - 8 PM", "8 PM - 12 AM"],
-            "Monday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
-            "Tuesday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
-            "Wednesday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
-            "Thursday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"],
-            "Friday": ["2 PM - 6 PM", "6 PM - 9 PM", "9 PM - 12 AM"]
+            "Saturday": "12 PM - 12 AM",
+            "Sunday": "12 PM - 12 AM",
+            "Monday": "2 PM - 12 AM",
+            "Tuesday": "2 PM - 12 AM",
+            "Wednesday": "2 PM - 12 AM",
+            "Thursday": "2 PM - 12 AM",
+            "Friday": "2 PM - 12 AM"
         }
 
-        weekly_schedule = {day: [] for day in time_slots.keys()}  # start empty daily schedules
+        # prep the schedule dictionary
+        weekly_schedule = {day: [] for day in time_slots.keys()}
 
+        # populate the weekly schedule based on "Days Available" tab in excel
         for _, row in self.schedule_df.iterrows():
-            # skip workers who violate shift hour constraints
-            if "Shift Hours" in row and row['Shift Hours'] > self.MAX_HOURS:
-                continue
-            
-            for day, slots in time_slots.items():
-                # check if the worker is available on this day
-                if day in row['Days Available']:
-                    if "Time not Available" in row and day in str(row['Time not Available']):
-                        continue  # skip if the worker marked 'Not Available' for this day
+            for day in time_slots.keys():
+                if day in row["Days Available"]:
+                    weekly_schedule[day].append(f"{row['First Name']} {row['Last Name']}")
 
-                    available_times = str(row['Time Available on Days Available']).split(",")
-                    for slot in slots:
-                        # if the worker is available for this slot and we haven't filled the day's quota
-                        if slot.strip() in available_times and len(weekly_schedule[day]) < self.MAX_SHIFTS_PER_DAY:
-                            weekly_schedule[day].append(f"{row['First Name']} {row['Last Name']} - {slot.strip()}")
-                            break  # assign this worker to the slot, and move to the next worker
+        self.schedule_data = weekly_schedule
 
-        self.schedule_data = weekly_schedule  # save schedule data
-        print(self.schedule_data)  # for debugging
-        messagebox.showinfo("Success", "Schedule generated successfully!")
-    
+        # make the calendar style pic
+        self.create_calendar_image(weekly_schedule, time_slots)
+        messagebox.showinfo("Success", "Weekly schedule generated! Image saved as 'weekly_schedule.png'.")
+
+    def create_calendar_image(self, weekly_schedule, time_slots):
+        # pic settings
+        width, height = 1000, 700
+        header_height = 100
+        color_bg = (255, 255, 255)
+        color_header = (70, 130, 180)
+        color_text = (0, 0, 0)
+
+        # make pic
+        img = Image.new("RGB", (width, height), color_bg)
+        draw = ImageDraw.Draw(img)
+
+        # add Title
+        font_title = ImageFont.truetype("arial.ttf", 40)
+        draw.text((width // 2 - 150, 10), "Weekly Schedule", fill=color_header, font=font_title)
+
+        # add the days and schedules
+        font_body = ImageFont.truetype("arial.ttf", 20)
+        row_height = (height - header_height) // 7
+
+        for i, (day, workers) in enumerate(weekly_schedule.items()):
+            y_start = header_height + i * row_height
+
+            # draw day header
+            draw.rectangle([0, y_start, width, y_start + row_height], outline=color_header, width=3)
+            day_text = f"{day} ({time_slots[day]})"
+            draw.text((10, y_start + 10), day_text, fill=color_header, font=font_body)
+
+            # add worker names
+            worker_text = ", ".join(workers) if workers else "No workers available"
+            draw.text((20, y_start + 40), worker_text, fill=color_text, font=font_body)
+
+        # save the image
+        img.save(self.image_path)
+
     def save_word_file(self):
         if not self.schedule_data:
             messagebox.showerror("Error", "Please generate the schedule first.")
             return
 
         try:
+            # make word document
             doc = Document()
             doc.add_heading("Weekly Schedule", level=1)
 
             for day, workers in self.schedule_data.items():
                 doc.add_heading(day, level=2)
-                doc.add_paragraph("\n".join(workers) if workers else "No workers available")
+                doc.add_paragraph(", ".join(workers) if workers else "No workers available")
             
+            # save Word file
             file_path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word files", "*.docx")])
             if file_path:
                 doc.save(file_path)
