@@ -1,37 +1,56 @@
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageDraw, ImageFont
 from docx import Document
 import random
-import time  # importing time for randomizing
-
-# --------------------------------------------------------------------------------------------------------------- #
+import time
 
 class WeeklyScheduleGenerator:
     def __init__(self, root):
+        """Initialize main GUI components."""
         self.root = root
         self.root.title("Weekly Schedule Generator")
-        self.root.geometry("400x250")
+        self.root.geometry("500x400")
+        
+        # config styles
+        style = ttk.Style()
+        style.configure('TButton', padding=10)
+        
+        # making the main frame
+        main_frame = ttk.Frame(root, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # title label
+        title_label = ttk.Label(main_frame, text="Weekly Schedule Generator", 
+                              font=('Helvetica', 16, 'bold'))
+        title_label.pack(pady=(0, 20))
 
-        self.load_button = tk.Button(root, text="Load Excel Schedule", command=self.load_schedule)
-        self.load_button.pack(pady=10)
+        # buttons for the app
+        self.load_button = ttk.Button(main_frame, text="Load Excel Schedule", 
+                                    command=self.load_schedule)
+        self.load_button.pack(pady=10, fill=tk.X)
 
-        self.generate_availability_button = tk.Button(root, text="Generate Availability", command=self.generate_availability)
-        self.generate_availability_button.pack(pady=10)
+        self.generate_availability_button = ttk.Button(main_frame, 
+                                                     text="Generate Availability", 
+                                                     command=self.generate_availability)
+        self.generate_availability_button.pack(pady=10, fill=tk.X)
 
-        self.generate_schedule_button = tk.Button(root, text="Generate Schedule", command=self.generate_schedule)
-        self.generate_schedule_button.pack(pady=10)
+        self.generate_schedule_button = ttk.Button(main_frame, 
+                                                 text="Generate Schedule", 
+                                                 command=self.generate_schedule)
+        self.generate_schedule_button.pack(pady=10, fill=tk.X)
 
-        self.save_button = tk.Button(root, text="Save Word File", command=self.save_word_file)
-        self.save_button.pack(pady=10)
+        self.save_button = ttk.Button(main_frame, text="Save Word File", 
+                                    command=self.save_word_file)
+        self.save_button.pack(pady=10, fill=tk.X)
 
-        self.availability_data = None  # who's available for each time slot
-        self.schedule_data = None  # final worker assignment for each time slot
-        self.image_path = "weekly_schedule.png"  # path to save the generated image
+        # data containers
+        self.schedule_df = None
+        self.availability_data = None
+        self.schedule_data = None
+        self.image_path = "final_schedule.png"
 
-# --------------------------------------------------------------------------------------------------------------- #    
-    
     def load_schedule(self):
         """Loads the Excel schedule file into a DataFrame."""
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
@@ -42,10 +61,12 @@ class WeeklyScheduleGenerator:
             # load data into a pandas DataFrame
             self.schedule_df = pd.read_excel(file_path)
 
-            # make sure all needed columns are their
-            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available'}
+            # making sure all columns are there
+            required_columns = {'First Name', 'Last Name', 'Email', 'Sunday', 'Monday', 
+                              'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'}
             if not required_columns.issubset(self.schedule_df.columns):
-                messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
+                messagebox.showerror("Error", 
+                                   f"Excel file must contain the following columns: {', '.join(required_columns)}")
                 return
 
             messagebox.showinfo("Success", "Schedule file loaded successfully!")
@@ -53,15 +74,13 @@ class WeeklyScheduleGenerator:
             messagebox.showerror("Error", f"Failed to load schedule file: {e}")
             self.schedule_df = None
 
-# --------------------------------------------------------------------------------------------------------------- #
-    
     def generate_availability(self):
-        """Generates availability data based on the loaded schedule."""
+        """Processes the loaded schedule to create availability data per day and shift."""
         if self.schedule_df is None:
             messagebox.showerror("Error", "Please load a schedule file first.")
             return
 
-        # call shifts and their times
+        # defining available shifts and times
         shifts = {
             "Sunday": ["12 PM - 4 PM", "4 PM - 7 PM", "7 PM - 10 PM", "10 PM - 12 AM"],
             "Monday": ["2 PM - 5 PM", "5 PM - 8 PM", "8 PM - 12 AM"],
@@ -72,67 +91,87 @@ class WeeklyScheduleGenerator:
             "Saturday": ["12 PM - 4 PM", "4 PM - 8 PM", "8 PM - 12 AM"]
         }
 
-        # prep availability data
+        # making a nested dictionary for availability
         availability = {day: {shift: [] for shift in shifts[day]} for day in shifts.keys()}
 
         for _, row in self.schedule_df.iterrows():
             for day in availability.keys():
-                if day in row["Days Available"]:
+                if pd.notna(row[day]) and row[day].lower() != 'na':
                     for shift in availability[day]:
                         availability[day][shift].append(f"{row['First Name']} {row['Last Name']}")
 
         self.availability_data = availability
+        messagebox.showinfo("Success", "Availability data created successfully!")
 
-        # make an availability calendar image
-        self.create_calendar_image(availability, shifts, title="Who is Available")
-        messagebox.showinfo("Success", "Availability generated! Image saved as 'weekly_schedule.png'.")
-
-# --------------------------------------------------------------------------------------------------------------- #
-    
     def generate_schedule(self):
-        """Generates a unique weekly schedule based on the availability data."""
+        """Generates a balanced schedule based on availability data."""
         if not self.availability_data:
             messagebox.showerror("Error", "Please generate availability first.")
             return
 
-        # start the final schedule based on the same structure as availability
-        schedule = {day: {shift: None for shift in shifts} for day, shifts in self.availability_data.items()}
+        # start worker hours tracker
+        worker_hours = {}  # key: worker name, value: total hours assigned
+        
+        # helper to calculate shift duration in hours
+        def calculate_shift_duration(shift_time):
+            """Calculate duration of a shift in hours."""
+            start, end = shift_time.split(" - ")
 
-        # set a dynamic random seed to guarantee unique results every time the function is called
-        timestamp = time.time()  # get the current timestamp
-        random.seed(timestamp)  # use timestamp as the seed
+            def convert_to_24hr(time_str):
+                time = int(time_str.split()[0])
+                if "PM" in time_str and time != 12:
+                    time += 12
+                elif "AM" in time_str and time == 12:
+                    time = 0
+                return time
 
-        # assign one person per shift
+            start_hour = convert_to_24hr(start)
+            end_hour = convert_to_24hr(end)
+            if end_hour < start_hour:  # account for overnight shift
+                end_hour += 24
+            return end_hour - start_hour
+
+        # start schedule dictionary
+        schedule = {day: {shift: None for shift in shifts} 
+                    for day, shifts in self.availability_data.items()}
+
+        # assign workers while trying to balance hours
         for day, shifts in self.availability_data.items():
-            assigned_workers = set()  # keep track of workers already assigned to a shift
-
             for shift, workers in shifts.items():
-                # shuffle workers to randomize assignments
-                random.shuffle(workers)
+                if not workers:  # skip if no workers are available for this shift
+                    continue
 
-                # assign the first available worker who isn't already assigned
+                # get the duration of the shift
+                shift_duration = calculate_shift_duration(shift)
+
+                # start workers not in worker_hours with 0 total hours
                 for worker in workers:
-                    if worker not in assigned_workers:
-                        schedule[day][shift] = worker
-                        assigned_workers.add(worker)
-                        break
+                    if worker not in worker_hours:
+                        worker_hours[worker] = 0
 
-                # if no one's available, assign any worker (to fill the shift gap)
-                if not schedule[day][shift] and workers:
-                    schedule[day][shift] = workers[0]  # over assign by taking the first worker from the shuffled list
+                # sort out workers by their total assigned hours (ascending)
+                workers_sorted = sorted(workers, key=lambda w: worker_hours[w])
 
-        # saving the generated schedule
+                # assign the available worker with the least total hours
+                assigned_worker = None
+                for worker in workers_sorted:
+                    assigned_worker = worker
+                    break
+
+                # give the worker to the shift
+                schedule[day][shift] = assigned_worker
+                
+                if assigned_worker:
+                    # update workers total hours
+                    worker_hours[assigned_worker] += shift_duration
+
         self.schedule_data = schedule
+        self.create_calendar_image(schedule)
+        messagebox.showinfo("Success", "Schedule generated successfully!")
 
-        # making an updated pic with the final schedule
-        self.create_calendar_image(schedule, {day: list(shifts.keys()) for day, shifts in self.availability_data.items()}, title="Final Schedule")
-        messagebox.showinfo("Success", "Final schedule generated! Image saved as 'weekly_schedule.png'.")
-
-# --------------------------------------------------------------------------------------------------------------- #
-    
-    def create_calendar_image(self, data, shifts, title="Weekly Schedule"):
-        """Creates a visual representation of the weekly schedule or availability."""
-        # pictures settings
+    def create_calendar_image(self, data, title="Weekly Schedule"):
+        """Generates a PNG visual representation of the schedule."""
+        # pic settings
         width, height = 1200, 1000
         header_height = 100
         color_bg = (255, 255, 255)
@@ -143,61 +182,135 @@ class WeeklyScheduleGenerator:
         img = Image.new("RGB", (width, height), color_bg)
         draw = ImageDraw.Draw(img)
 
-        # title
-        font_title = ImageFont.truetype("arial.ttf", 40)
+        try:
+            font_title = ImageFont.truetype("arial.ttf", 40)
+            font_body = ImageFont.truetype("arial.ttf", 20)
+        except:
+            # fallback to default font if arial isn't available
+            font_title = ImageFont.load_default()
+            font_body = ImageFont.load_default()
+
+        # add title
         draw.text((width // 2 - 200, 10), title, fill=color_header, font=font_title)
 
-        # draw the schedule by day and shift
-        font_body = ImageFont.truetype("arial.ttf", 20)
+        # draw schedule data
         row_height = (height - header_height) // len(data)
 
         for i, (day, shift_data) in enumerate(data.items()):
             y_start = header_height + i * row_height
 
             # draw day header
-            draw.text((10, y_start + 10), day, fill=color_header, font=font_body)
+            draw.text((10, y_start), day, fill=color_header, font=font_body)
 
             # add shifts and workers
             y_shift = y_start + 40
             for shift, worker in shift_data.items():
-                shift_text = f"{shift}: {worker if worker else 'No one assigned'}"
+                shift_text = f"{shift}: {worker if worker else 'Unassigned'}"
                 draw.text((40, y_shift), shift_text, fill=color_text, font=font_body)
                 y_shift += 30
 
-        # save pic (png)
         img.save(self.image_path)
 
-# --------------------------------------------------------------------------------------------------------------- #
-    
     def save_word_file(self):
-        """Saves the final schedule as a Word document."""
+        """Saves the generated schedule and worker summary to a Word document."""
         if not self.schedule_data:
             messagebox.showerror("Error", "Please generate the final schedule first.")
             return
 
         try:
-            # make word document
             doc = Document()
-            doc.add_heading("Weekly Schedule", level=1)
+            
+            # add title with formatting
+            title = doc.add_heading("Weekly Schedule", level=1)
+            title.alignment = 1  # center alignment
+            doc.add_paragraph()
+            
+            # track worker hours
+            worker_hours = {}
+            
+            def calculate_shift_duration(shift_time):
+                """Calculate duration of a shift in hours."""
+                start, end = shift_time.split(" - ")
+                
+                def convert_to_24hr(time_str):
+                    time = int(time_str.split()[0])
+                    if "PM" in time_str and time != 12:
+                        time += 12
+                    elif "AM" in time_str and time == 12:
+                        time = 0
+                    return time
+                
+                start_hour = convert_to_24hr(start)
+                end_hour = convert_to_24hr(end)
+                
+                if end_hour < start_hour:
+                    end_hour += 24
+                    
+                return end_hour - start_hour
 
-            for day, shift_data in self.schedule_data.items():
-                doc.add_heading(day, level=2)
-                for shift, worker in shift_data.items():
-                    doc.add_paragraph(f"{shift}: {worker if worker else 'No one assigned'}")
+            # add each day's schedule
+            for day, shifts in self.schedule_data.items():
+                # add day header
+                day_heading = doc.add_heading(day, level=2)
+                
+                # make table for shifts
+                table = doc.add_table(rows=1, cols=2)
+                table.style = 'Table Grid'
+                
+                # set headers
+                header_cells = table.rows[0].cells
+                header_cells[0].text = "Shift Time"
+                header_cells[1].text = "Worker"
+                
+                # add shifts to table
+                for shift, worker in shifts.items():
+                    row_cells = table.add_row().cells
+                    row_cells[0].text = shift
+                    row_cells[1].text = worker if worker else 'Unassigned'
+                    
+                    # calculate hours
+                    if worker:
+                        duration = calculate_shift_duration(shift)
+                        worker_hours[worker] = worker_hours.get(worker, 0) + duration
+                
+                doc.add_paragraph()  # add spacing
 
-            # save word file
-            file_path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word files", "*.docx")])
+            # add hours summary
+            doc.add_heading("Weekly Hours Summary", level=2)
+            summary_table = doc.add_table(rows=1, cols=2)
+            summary_table.style = 'Table Grid'
+            
+            # set up summary headers
+            header_cells = summary_table.rows[0].cells
+            header_cells[0].text = "Worker Name"
+            header_cells[1].text = "Total Hours"
+            
+            # add worker hours (sorted by hours)
+            sorted_workers = sorted(worker_hours.items(), key=lambda x: x[1], reverse=True)
+            for worker, hours in sorted_workers:
+                row_cells = summary_table.add_row().cells
+                row_cells[0].text = worker
+                row_cells[1].text = f"{hours} hours"
+            
+            # add generation timestamp
+            doc.add_paragraph()
+            footer = doc.add_paragraph(f"Generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            footer.alignment = 1
+
+            # save the file
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".docx",
+                filetypes=[("Word files", "*.docx")],
+                initialfile="Weekly_Schedule.docx"
+            )
             if file_path:
                 doc.save(file_path)
-                messagebox.showinfo("Success", f"Word file saved successfully at {file_path}.")
+                messagebox.showinfo("Success", "Schedule saved successfully!")
+                
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save Word file: {e}")
-
-# --------------------------------------------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = WeeklyScheduleGenerator(root)
     root.mainloop()
-    
-# end
