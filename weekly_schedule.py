@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw, ImageFont
 from docx import Document
+import random
 
 
 class WeeklyScheduleGenerator:
@@ -24,8 +25,8 @@ class WeeklyScheduleGenerator:
         self.save_button.pack(pady=10)
 
         self.availability_data = None  # who is available for each time slot
-        self.schedule_data = None  # final worker for each time slot
-        self.image_path = "weekly_schedule.png"  # path to save the picture
+        self.schedule_data = None  # fnial worker assignment for each time slot
+        self.image_path = "weekly_schedule.png"  # path to save the generated image
 
     def load_schedule(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
@@ -36,7 +37,7 @@ class WeeklyScheduleGenerator:
             # load data into a pandas dataframe
             self.schedule_df = pd.read_excel(file_path)
 
-            # make sure columns are on the excel sheet
+            # make sure all needed columns are present
             required_columns = {'First Name', 'Last Name', 'Email', 'Days Available'}
             if not required_columns.issubset(self.schedule_df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
@@ -52,7 +53,7 @@ class WeeklyScheduleGenerator:
             messagebox.showerror("Error", "Please load a schedule file first.")
             return
 
-        # shifts and times (can change whenever)
+        # make shifts and their times
         shifts = {
             "Sunday": ["12 PM - 4 PM", "4 PM - 7 PM", "7 PM - 10 PM", "10 PM - 12 AM"],
             "Monday": ["2 PM - 5 PM", "5 PM - 8 PM", "8 PM - 12 AM"],
@@ -85,10 +86,13 @@ class WeeklyScheduleGenerator:
         # start the final schedule with the same structure as availability
         schedule = {day: {shift: None for shift in shifts} for day, shifts in self.availability_data.items()}
 
-        # call on one person per shift
+        # assign one person per shift
         for day, shifts in self.availability_data.items():
-            assigned_workers = set()  # keep track of workers already assigned
+            assigned_workers = set()  # Keep track of workers already assigned
             for shift, workers in shifts.items():
+                # shuffle workers to randomize assignments
+                random.shuffle(workers)
+
                 # assign the first available worker who isn't already assigned
                 for worker in workers:
                     if worker not in assigned_workers:
@@ -96,9 +100,9 @@ class WeeklyScheduleGenerator:
                         assigned_workers.add(worker)
                         break
 
-                # if no one is available, over assign a worker (from the top of the list) to fill the spots
+                # if no one is available, over assign workers (from the random shuffled list) to fill the gap
                 if not schedule[day][shift] and workers:
-                    schedule[day][shift] = workers[0]  # reassign the first worker in the list (queue from bottom to top)
+                    schedule[day][shift] = workers[0]  # reassign the first worker in the list
 
         self.schedule_data = schedule
         self.create_calendar_image(schedule, {day: list(shifts.keys()) for day, shifts in self.availability_data.items()}, title="Final Schedule")
@@ -112,11 +116,11 @@ class WeeklyScheduleGenerator:
         color_header = (70, 130, 180)
         color_text = (0, 0, 0)
 
-        # make the picture
+        # making the image
         img = Image.new("RGB", (width, height), color_bg)
         draw = ImageDraw.Draw(img)
 
-        # add title
+        # title
         font_title = ImageFont.truetype("arial.ttf", 40)
         draw.text((width // 2 - 200, 10), title, fill=color_header, font=font_title)
 
@@ -127,7 +131,7 @@ class WeeklyScheduleGenerator:
         for i, (day, shift_data) in enumerate(data.items()):
             y_start = header_height + i * row_height
 
-            # draw out day header
+            # draw day header
             draw.text((10, y_start + 10), day, fill=color_header, font=font_body)
 
             # add shifts and workers
@@ -137,7 +141,7 @@ class WeeklyScheduleGenerator:
                 draw.text((40, y_shift), shift_text, fill=color_text, font=font_body)
                 y_shift += 30
 
-        # save the picture
+        # save picture
         img.save(self.image_path)
 
     def save_word_file(self):
@@ -146,7 +150,7 @@ class WeeklyScheduleGenerator:
             return
 
         try:
-            # make the word document
+            # make word doc
             doc = Document()
             doc.add_heading("Weekly Schedule", level=1)
 
