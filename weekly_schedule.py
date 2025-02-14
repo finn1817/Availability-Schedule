@@ -4,7 +4,9 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageDraw, ImageFont
 from docx import Document
 import random
+import time  # importing time for randomizing
 
+# --------------------------------------------------------------------------------------------------------------- #
 
 class WeeklyScheduleGenerator:
     def __init__(self, root):
@@ -24,20 +26,23 @@ class WeeklyScheduleGenerator:
         self.save_button = tk.Button(root, text="Save Word File", command=self.save_word_file)
         self.save_button.pack(pady=10)
 
-        self.availability_data = None  # who is available for each time slot
-        self.schedule_data = None  # fnial worker assignment for each time slot
+        self.availability_data = None  # who's available for each time slot
+        self.schedule_data = None  # final worker assignment for each time slot
         self.image_path = "weekly_schedule.png"  # path to save the generated image
 
+# --------------------------------------------------------------------------------------------------------------- #    
+    
     def load_schedule(self):
+        """Loads the Excel schedule file into a DataFrame."""
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
         if not file_path:
             return
 
         try:
-            # load data into a pandas dataframe
+            # load data into a pandas DataFrame
             self.schedule_df = pd.read_excel(file_path)
 
-            # make sure all needed columns are present
+            # make sure all needed columns are their
             required_columns = {'First Name', 'Last Name', 'Email', 'Days Available'}
             if not required_columns.issubset(self.schedule_df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
@@ -48,12 +53,15 @@ class WeeklyScheduleGenerator:
             messagebox.showerror("Error", f"Failed to load schedule file: {e}")
             self.schedule_df = None
 
+# --------------------------------------------------------------------------------------------------------------- #
+    
     def generate_availability(self):
+        """Generates availability data based on the loaded schedule."""
         if self.schedule_df is None:
             messagebox.showerror("Error", "Please load a schedule file first.")
             return
 
-        # make shifts and their times
+        # call shifts and their times
         shifts = {
             "Sunday": ["12 PM - 4 PM", "4 PM - 7 PM", "7 PM - 10 PM", "10 PM - 12 AM"],
             "Monday": ["2 PM - 5 PM", "5 PM - 8 PM", "8 PM - 12 AM"],
@@ -75,20 +83,29 @@ class WeeklyScheduleGenerator:
 
         self.availability_data = availability
 
+        # make an availability calendar image
         self.create_calendar_image(availability, shifts, title="Who is Available")
         messagebox.showinfo("Success", "Availability generated! Image saved as 'weekly_schedule.png'.")
 
+# --------------------------------------------------------------------------------------------------------------- #
+    
     def generate_schedule(self):
+        """Generates a unique weekly schedule based on the availability data."""
         if not self.availability_data:
             messagebox.showerror("Error", "Please generate availability first.")
             return
 
-        # start the final schedule with the same structure as availability
+        # start the final schedule based on the same structure as availability
         schedule = {day: {shift: None for shift in shifts} for day, shifts in self.availability_data.items()}
+
+        # set a dynamic random seed to guarantee unique results every time the function is called
+        timestamp = time.time()  # get the current timestamp
+        random.seed(timestamp)  # use timestamp as the seed
 
         # assign one person per shift
         for day, shifts in self.availability_data.items():
-            assigned_workers = set()  # Keep track of workers already assigned
+            assigned_workers = set()  # keep track of workers already assigned to a shift
+
             for shift, workers in shifts.items():
                 # shuffle workers to randomize assignments
                 random.shuffle(workers)
@@ -100,23 +117,29 @@ class WeeklyScheduleGenerator:
                         assigned_workers.add(worker)
                         break
 
-                # if no one is available, over assign workers (from the random shuffled list) to fill the gap
+                # if no one's available, assign any worker (to fill the shift gap)
                 if not schedule[day][shift] and workers:
-                    schedule[day][shift] = workers[0]  # reassign the first worker in the list
+                    schedule[day][shift] = workers[0]  # over assign by taking the first worker from the shuffled list
 
+        # saving the generated schedule
         self.schedule_data = schedule
+
+        # making an updated pic with the final schedule
         self.create_calendar_image(schedule, {day: list(shifts.keys()) for day, shifts in self.availability_data.items()}, title="Final Schedule")
         messagebox.showinfo("Success", "Final schedule generated! Image saved as 'weekly_schedule.png'.")
 
+# --------------------------------------------------------------------------------------------------------------- #
+    
     def create_calendar_image(self, data, shifts, title="Weekly Schedule"):
-        # picture settings
+        """Creates a visual representation of the weekly schedule or availability."""
+        # pictures settings
         width, height = 1200, 1000
         header_height = 100
         color_bg = (255, 255, 255)
         color_header = (70, 130, 180)
         color_text = (0, 0, 0)
 
-        # making the image
+        # make the image
         img = Image.new("RGB", (width, height), color_bg)
         draw = ImageDraw.Draw(img)
 
@@ -141,16 +164,19 @@ class WeeklyScheduleGenerator:
                 draw.text((40, y_shift), shift_text, fill=color_text, font=font_body)
                 y_shift += 30
 
-        # save picture
+        # save pic (png)
         img.save(self.image_path)
 
+# --------------------------------------------------------------------------------------------------------------- #
+    
     def save_word_file(self):
+        """Saves the final schedule as a Word document."""
         if not self.schedule_data:
             messagebox.showerror("Error", "Please generate the final schedule first.")
             return
 
         try:
-            # make word doc
+            # make word document
             doc = Document()
             doc.add_heading("Weekly Schedule", level=1)
 
@@ -167,8 +193,11 @@ class WeeklyScheduleGenerator:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save Word file: {e}")
 
+# --------------------------------------------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = WeeklyScheduleGenerator(root)
     root.mainloop()
+    
+# end
