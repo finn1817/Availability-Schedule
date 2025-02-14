@@ -7,7 +7,7 @@ class ScheduleViewer:
         self.root = root
         self.root.title("Schedule Viewer")
         self.root.geometry("700x600")
-        self.current_file_path = None  # keep the last Excel file path
+        self.current_file_path = None  # keeps the last Excel file path
 
         self.load_button = tk.Button(root, text="Load Schedule", command=self.load_schedule)
         self.load_button.pack(pady=10)
@@ -51,7 +51,8 @@ class ScheduleViewer:
                 messagebox.showerror("Error", "Please select a day.")
                 return
 
-            required_columns = {'First Name', 'Last Name', 'Email', 'Days Available', 'Time Available on Days Available', 'Time not Available'}
+            # checking for the needed columns for the upated logic
+            required_columns = {'First Name', 'Last Name', 'Email', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'}
             if not required_columns.issubset(self.df.columns):
                 messagebox.showerror("Error", f"Excel file must contain the following columns: {', '.join(required_columns)}")
                 return
@@ -60,10 +61,14 @@ class ScheduleViewer:
             self.available_text.delete("1.0", tk.END)
 
             selected_day = selected_day.strip()
+            
+            # filter based on the day's availability
             available_workers = self.df[
-                self.df['Days Available'].str.contains(fr'\b{selected_day}\b', case=False, na=False)
+                (self.df[selected_day].notna()) & (self.df[selected_day].str.lower() != 'na')
             ]
-            not_available_workers = self.df[~self.df['Email'].isin(available_workers['Email'])]
+            not_available_workers = self.df[
+                ~((self.df[selected_day].notna()) & (self.df[selected_day].str.lower() != 'na'))
+            ]
 
             # show workers who are not available
             if not not_available_workers.empty:
@@ -81,7 +86,7 @@ class ScheduleViewer:
                 for _, row in available_workers.iterrows():
                     self.available_text.insert(
                         tk.END,
-                        f"{row['First Name']} {row['Last Name']} - Email: {row['Email']} - Time Available: {row['Time Available on Days Available']}\n"
+                        f"{row['First Name']} {row['Last Name']} - Email: {row['Email']} - Available Time: {row[selected_day]}\n"
                     )
             else:
                 self.available_text.insert(tk.END, f"No workers marked as 'Available' for {selected_day}.\n")
