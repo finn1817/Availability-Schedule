@@ -3,7 +3,7 @@ from tkinter import messagebox, simpledialog, filedialog
 import pandas as pd
 import json
 from weekly_schedule import WeeklyScheduleGenerator
-from schedule_viewer import WeeklyScheduleGenerator
+from schedule_viewer import ScheduleViewer
 
 
 class WorkplaceManager:
@@ -12,7 +12,7 @@ class WorkplaceManager:
         self.root.title("Manage Workplaces & Schedules")
         self.root.geometry("800x600")
         self.data = data
-        self.save_callback = save_callback
+        self.save_callback = save_callback  # save_callback will handle saving schedule
 
         # main layout
         self.setup_layout()
@@ -94,8 +94,7 @@ class WorkplaceManager:
 
     def view_schedule(self):
         """Launch the Schedule Viewer."""
-        WeeklyScheduleGenerator(self.root)
-
+        ScheduleViewer(self.root)
 
     def generate_weekly_schedule(self):
         """Launch the Weekly Schedule Generator."""
@@ -103,6 +102,6 @@ class WorkplaceManager:
 
     def save_data(self):
         """Save changes to data."""
-        self.save_callback()
+        self.save_callback()  # Trigger the callback to save the schedule files
         self.refresh_workplace_list()
         messagebox.showinfo("Save", "Workplaces and schedules saved successfully!")
