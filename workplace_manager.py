@@ -3,7 +3,7 @@ from tkinter import messagebox, simpledialog, filedialog
 import pandas as pd
 import json
 from weekly_schedule import WeeklyScheduleGenerator
-from schedule_viewer import ScheduleViewer
+from schedule_viewer import WeeklyScheduleGenerator
 
 
 class WorkplaceManager:
