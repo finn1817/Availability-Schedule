@@ -104,66 +104,40 @@ class WeeklyScheduleGenerator:
         messagebox.showinfo("Success", "Availability data created successfully!")
 
     def generate_schedule(self):
-        """Generates a balanced schedule based on availability data."""
+        """Randomly generates schedule based on availability data."""
         if not self.availability_data:
             messagebox.showerror("Error", "Please generate availability first.")
             return
 
-        # start worker hours tracker
-        worker_hours = {}  # key: worker name, value: total hours assigned
-        
-        # helper to calculate shift duration in hours
-        def calculate_shift_duration(shift_time):
-            """Calculate duration of a shift in hours."""
-            start, end = shift_time.split(" - ")
-
-            def convert_to_24hr(time_str):
-                time = int(time_str.split()[0])
-                if "PM" in time_str and time != 12:
-                    time += 12
-                elif "AM" in time_str and time == 12:
-                    time = 0
-                return time
-
-            start_hour = convert_to_24hr(start)
-            end_hour = convert_to_24hr(end)
-            if end_hour < start_hour:  # account for overnight shift
-                end_hour += 24
-            return end_hour - start_hour
-
-        # start schedule dictionary
+        # initialize schedule dictionary
         schedule = {day: {shift: None for shift in shifts} 
-                    for day, shifts in self.availability_data.items()}
+                   for day, shifts in self.availability_data.items()}
 
-        # assign workers while trying to balance hours
+        # use current time as random seed
+        random.seed(time.time())
+
+        # assign workers to shifts
         for day, shifts in self.availability_data.items():
+            assigned_workers = set()  # track assigned workers
+
             for shift, workers in shifts.items():
-                if not workers:  # skip if no workers are available for this shift
+                if not workers:  # skip if no workers available
                     continue
 
-                # get the duration of the shift
-                shift_duration = calculate_shift_duration(shift)
+                random.shuffle(workers)  # randomize worker order
+                assigned = False
 
-                # start workers not in worker_hours with 0 total hours
+                # try to assign someone who hasn't worked yet today
                 for worker in workers:
-                    if worker not in worker_hours:
-                        worker_hours[worker] = 0
+                    if worker not in assigned_workers:
+                        schedule[day][shift] = worker
+                        assigned_workers.add(worker)
+                        assigned = True
+                        break
 
-                # sort out workers by their total assigned hours (ascending)
-                workers_sorted = sorted(workers, key=lambda w: worker_hours[w])
-
-                # assign the available worker with the least total hours
-                assigned_worker = None
-                for worker in workers_sorted:
-                    assigned_worker = worker
-                    break
-
-                # give the worker to the shift
-                schedule[day][shift] = assigned_worker
-                
-                if assigned_worker:
-                    # update workers total hours
-                    worker_hours[assigned_worker] += shift_duration
+                # if everyone has worked, pick the first available person
+                if not assigned:
+                    schedule[day][shift] = workers[0]
 
         self.schedule_data = schedule
         self.create_calendar_image(schedule)
